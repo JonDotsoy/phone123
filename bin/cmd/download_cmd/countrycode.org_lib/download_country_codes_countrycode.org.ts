@@ -1,12 +1,11 @@
-import fs from 'fs'
-import csvParse from 'csv-parse/lib/sync'
-import https from 'https'
-import { throws } from 'assert'
-import { objectToJS } from './ObjectToJS'
-import { objectToDTS } from './ObjectToDTS'
+import fs from "fs"
+import csvParse from "csv-parse/lib/sync"
+import https from "https"
+import { objectToJS } from "./ObjectToJS"
+import { objectToDTS } from "./ObjectToDTS"
 
-const SOURCE_PATH = `${__dirname}/../src`
-const LIB_PATH = `${__dirname}/../lib`
+const SOURCE_PATH = `${__dirname}/../../../../src`
+const LIB_COUNTRYCODES_PATH = `${__dirname}/../../../../lib/countrycodes`
 
 // https://countrycode.org/customer/countryCode/downloadCountryCodes
 // https://countrycode.org/customer/countryCode/downloadNationalCodes?country=AL
@@ -61,49 +60,57 @@ export interface CountryCodeFull extends CountryCode {
     CityCodes: CityCode[]
 }
 
-const getCache = (cachePath?: string) => cachePath
-    ? {
-        has: () => fs.existsSync(cachePath),
-        get: () => fs.readFileSync(cachePath),
-        put: (buffer: Buffer) => fs.writeFileSync(cachePath, buffer),
-    }
-    : undefined
+const getCache = (cachePath?: string) =>
+    cachePath
+        ? {
+              has: () => fs.existsSync(cachePath),
+              get: () => fs.readFileSync(cachePath),
+              put: (buffer: Buffer) => fs.writeFileSync(cachePath, buffer),
+          }
+        : undefined
 
-const downloadBuffer = ({ url, cachePath }: { url: string, cachePath?: string }) => new Promise<Buffer>((resolve, reject) => {
-    const c = getCache(cachePath)
+const downloadBuffer = ({
+    url,
+    cachePath,
+}: {
+    url: string
+    cachePath?: string
+}) =>
+    new Promise<Buffer>((resolve, reject) => {
+        const c = getCache(cachePath)
 
-    if (c?.has()) return resolve(c.get())
+        if (c?.has()) return resolve(c.get())
 
-    console.log(`Download... ${url}`)
+        console.log(`Download... ${url}`)
 
-    const req = https
-        .get(url, (res) => {
+        const req = https.get(url, (res) => {
             const body: Buffer[] = []
-            res.on('data', (d: Buffer) => {
+            res.on("data", (d: Buffer) => {
                 body.push(d)
             })
 
-            res.on('end', () => {
+            res.on("end", () => {
                 const buffer = Buffer.concat(body)
                 c?.put(buffer)
                 resolve(buffer)
             })
 
-            res.on('error', err => {
+            res.on("error", (err) => {
                 reject(err)
             })
         })
 
-    req.end()
-})
+        req.end()
+    })
 
 const downloadCountryCodes = async (): Promise<CountryCode[]> => {
     const res = await downloadBuffer({
-        url: 'https://countrycode.org/customer/countryCode/downloadCountryCodes',
+        url:
+            "https://countrycode.org/customer/countryCode/downloadCountryCodes",
         cachePath: `${SOURCE_PATH}/countrycode.org/countrycodes.csv`,
     })
 
-    return csvParse(res.toString('latin1'), {
+    return csvParse(res.toString("latin1"), {
         fromLine: 2,
         columns: [
             "CountryName",
@@ -126,62 +133,65 @@ const downloadCountryCodes = async (): Promise<CountryCode[]> => {
             "InternetUsers",
             "Phones (Mobile)",
             "Phones (Landline)",
-            "GDP"
+            "GDP",
         ],
         cast: (value, context) => {
             switch (context.column) {
-                case 'LanguageCodes':
-                case 'PhoneCode':
+                case "LanguageCodes":
+                case "PhoneCode":
                     return value.split(/\,\s*/)
-                case 'ISONumeric':
-                case 'GeoNameID':
-                case 'E164':
-                case 'AreaKM2':
-                case 'InternetHosts':
-                case 'InternetUsers':
-                case 'Phones (Mobile)':
-                case 'Phones (Landline)':
-                case 'GDP':
+                case "ISONumeric":
+                case "GeoNameID":
+                case "E164":
+                case "AreaKM2":
+                case "InternetHosts":
+                case "InternetUsers":
+                case "Phones (Mobile)":
+                case "Phones (Landline)":
+                case "GDP":
                     return value ? Number(value) : null
                 default:
                     return value
             }
-        }
+        },
     })
 }
 
-
-const downloadNationalCodes = async ({ ISO2 }: { ISO2: string }): Promise<NationalCode[]> => {
+const downloadNationalCodes = async ({
+    ISO2,
+}: {
+    ISO2: string
+}): Promise<NationalCode[]> => {
     const res = await downloadBuffer({
         url: `https://countrycode.org/customer/countryCode/downloadNationalCodes?country=${ISO2}`,
         cachePath: `${SOURCE_PATH}/countrycode.org/nationalcodes-${ISO2}.csv`,
     })
 
-    return csvParse(res.toString('latin1'), {
+    return csvParse(res.toString("latin1"), {
         fromLine: 2,
-        columns: [
-            "PhoneCode",
-            "Description"
-        ],
+        columns: ["PhoneCode", "Description"],
     })
 }
 
-const downloadCityCodes = async ({ ISO2 }: { ISO2: string }): Promise<CityCode[]> => {
+const downloadCityCodes = async ({
+    ISO2,
+}: {
+    ISO2: string
+}): Promise<CityCode[]> => {
     const res = await downloadBuffer({
         url: `https://countrycode.org/customer/countryCode/downloadCityCodes?country=${ISO2}`,
         cachePath: `${SOURCE_PATH}/countrycode.org/citycodes-${ISO2}.csv`,
     })
 
-    return csvParse(res.toString('latin1'), {
+    return csvParse(res.toString("latin1"), {
         fromLine: 2,
-        columns: [
-            "PhoneCode",
-            "Description"
-        ],
+        columns: ["PhoneCode", "Description"],
     })
 }
 
-const downloadCountryCodesFull = async (opt?: { cachePath?: string }): Promise<Buffer> => {
+const downloadCountryCodesFull = async (opt?: {
+    cachePath?: string
+}): Promise<Buffer> => {
     const c = getCache(opt?.cachePath)
 
     if (c?.has()) return c.get()
@@ -191,8 +201,12 @@ const downloadCountryCodesFull = async (opt?: { cachePath?: string }): Promise<B
     for (const countryCode of await downloadCountryCodes()) {
         const countrycodes = {
             ...countryCode,
-            CityCodes: (await downloadCityCodes({ ISO2: countryCode.ISO2 })).filter(e => !!e.Description),
-            NationalCodes: (await downloadNationalCodes({ ISO2: countryCode.ISO2 })).filter(e => !!e.Description),
+            CityCodes: (
+                await downloadCityCodes({ ISO2: countryCode.ISO2 })
+            ).filter((e) => !!e.Description),
+            NationalCodes: (
+                await downloadNationalCodes({ ISO2: countryCode.ISO2 })
+            ).filter((e) => !!e.Description),
         }
         e.push(countrycodes)
     }
@@ -204,14 +218,21 @@ const downloadCountryCodesFull = async (opt?: { cachePath?: string }): Promise<B
     return res
 }
 
-const writeLibItem = (opt: { fileName: string, varName: string, body: any }) => {
+const writeLibItem = (opt: {
+    fileName: string
+    varName: string
+    body: any
+}) => {
     const fileName = opt.fileName
     const varName = opt.varName
     const body = opt.body
 
-    fs.writeFileSync(`${LIB_PATH}/${fileName}.json`, JSON.stringify(body, null, 2))
     fs.writeFileSync(
-        `${LIB_PATH}/${fileName}.d.ts`,
+        `${LIB_COUNTRYCODES_PATH}/${fileName}.json`,
+        JSON.stringify(body, null, 2)
+    )
+    fs.writeFileSync(
+        `${LIB_COUNTRYCODES_PATH}/${fileName}.d.ts`,
         Buffer.concat([
             Buffer.from(`export declare const ${varName}: `),
             objectToDTS(body),
@@ -219,7 +240,7 @@ const writeLibItem = (opt: { fileName: string, varName: string, body: any }) => 
         ])
     )
     fs.writeFileSync(
-        `${LIB_PATH}/${fileName}.js`,
+        `${LIB_COUNTRYCODES_PATH}/${fileName}.js`,
         Buffer.concat([
             Buffer.from(`const ${varName} = `),
             objectToJS(body),
@@ -230,15 +251,20 @@ const writeLibItem = (opt: { fileName: string, varName: string, body: any }) => 
     )
 }
 
-const run = async () => {
-    const bf = await downloadCountryCodesFull({ cachePath: `${SOURCE_PATH}/countrycode.org/countrycodes.json` })
+export const run = async () => {
+    const bf = await downloadCountryCodesFull({
+        cachePath: `${SOURCE_PATH}/countrycode.org/countrycodes.json`,
+    })
 
     const countrycodes: CountryCodeFull[] = JSON.parse(bf.toString())
     const nextcountrycodes = countrycodes
     // .filter(e => e.ISO2 === 'CL')
 
-    fs.writeFileSync(`${LIB_PATH}/countrycodes.json`, JSON.stringify(nextcountrycodes, null, 2))
-    
+    fs.writeFileSync(
+        `${LIB_COUNTRYCODES_PATH}/countrycodes.json`,
+        JSON.stringify(nextcountrycodes, null, 2)
+    )
+
     writeLibItem({
         fileName: `countrycodes`,
         varName: `countrycodes`,
@@ -252,8 +278,4 @@ const run = async () => {
             body: countrycode,
         })
     }
-
-    console.log('done')
 }
-
-run()
